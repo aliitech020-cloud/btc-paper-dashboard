@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة التداول الورقي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f0f2f5; --border: #e1e4e8;
+    --text: #16181d; --muted: #6b7280; --faint: #9aa1ab;
+    --up: #0f9d6b; --down: #d6394a; --accent: #2f6fdb; --warn: #b7791f;
+    --up-bg: rgba(15,157,107,.10); --down-bg: rgba(214,57,74,.10);
+    --accent-bg: rgba(47,111,219,.10); --warn-bg: rgba(183,121,31,.12);
+    --grid: rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1016; --panel: #151a22; --panel-2: #1b212b; --border: #262d38;
+      --text: #e7eaf0; --muted: #98a2b3; --faint: #667085;
+      --up: #2fcb8e; --down: #f06272; --accent: #5b93f0; --warn: #e0a84a;
+      --up-bg: rgba(47,203,142,.12); --down-bg: rgba(240,98,114,.12);
+      --accent-bg: rgba(91,147,240,.14); --warn-bg: rgba(224,168,74,.14);
+      --grid: rgba(255,255,255,.05);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+    font-size: 15px; line-height: 1.5;
+  }
+  .num { font-family: "IBM Plex Mono", Consolas, monospace; direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  h1 { font-size: 22px; margin: 0; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .ok { color: var(--up); background: var(--up-bg); }
+  .warn { color: var(--warn); background: var(--warn-bg); }
+  .bad { color: var(--down); background: var(--down-bg); }
+  .info { color: var(--accent); background: var(--accent-bg); }
+  .live .dot { animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  @media (max-width: 560px) {
+    .summary { gap: 8px; }
+    .stat { padding: 10px 12px; }
+    .stat .value { font-size: 18px; }
+    .chart { height: 260px; }
+  }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .stat .label { color: var(--muted); font-size: 12.5px; }
+  .stat .value { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .stat .value.small { font-size: 17px; }
+
+  .accounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; padding: 14px 16px 10px; }
+  .sym { font-size: 19px; font-weight: 700; }
+  .sym small { color: var(--muted); font-weight: 500; font-size: 13px; margin-inline-start: 6px; }
+  .price { font-size: 24px; font-weight: 600; transition: color .4s; }
+  .flash-up { color: var(--up); } .flash-down { color: var(--down); }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .kpi { padding: 10px 16px; }
+  .kpi + .kpi { border-inline-start: 1px solid var(--border); }
+  .kpi .label { color: var(--muted); font-size: 12px; }
+  .kpi .value { font-weight: 600; font-size: 16px; }
+  @media (max-width: 560px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .kpi:nth-child(3) { border-inline-start: 0; }
+    .kpi:nth-child(n+3) { border-top: 1px solid var(--border); }
+  }
+  .position { margin: 12px 16px; padding: 12px 14px; border-radius: 10px; background: var(--panel-2); }
+  .position .title { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px 16px; margin-top: 10px; }
+  .pos-grid .label { color: var(--muted); font-size: 12px; }
+  .pos-grid .value { font-weight: 600; }
+  .stopbar { margin-top: 12px; height: 6px; border-radius: 3px; background: var(--border); position: relative; overflow: hidden; direction: ltr; }
+  .stopbar > div { position: absolute; inset: 0 auto 0 0; background: var(--up); border-radius: 3px; transition: width .4s; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .chart { height: 320px; margin: 4px 8px 0; direction: ltr; }
+  details { border-top: 1px solid var(--border); }
+  summary { cursor: pointer; padding: 10px 16px; color: var(--muted); font-size: 13.5px; }
+  .log { margin: 0; padding: 0 16px 14px; font-size: 12.5px; color: var(--muted); direction: ltr; text-align: left; white-space: pre-wrap; max-height: 220px; overflow: auto; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .empty { text-align: center; padding: 60px 16px; color: var(--muted); }
+  footer { color: var(--faint); font-size: 12.5px; margin-top: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>لوحة التداول الورقي</h1>
+      <div class="sub">بدون أموال حقيقية · الأسعار حية من Binance · الإستراتيجية D على فريم 4 ساعات</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <span id="conn" class="pill info live"><span class="dot"></span>جارٍ الاتصال…</span>
+      <span id="health" class="pill info"><span class="dot"></span>…</span>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="stat"><div class="label">إجمالي الرصيد (لحظي)</div><div class="value num" id="t-equity">—</div></div>
+    <div class="stat"><div class="label">الربح / الخسارة الكلي</div><div class="value num" id="t-pnl">—</div></div>
+    <div class="stat"><div class="label">صفقات مفتوحة</div><div class="value" id="t-open">—</div></div>
+    <div class="stat"><div class="label">الشمعة الحالية تُغلق بعد</div><div class="value num" id="t-countdown">—</div></div>
+    <div class="stat"><div class="label">الساعة الآن</div><div class="value small num" id="t-clock">—</div></div>
+  </section>
+
+  <section class="accounts" id="accounts"><div class="empty">جارٍ تحميل الحسابات…</div></section>
+
+  <footer><div id="t-updated"></div>البوت يعمل على السحابة ويقرّر فقط عند إغلاق كل شمعة 4 ساعات. هذه الصفحة للمشاهدة فقط ولا تنفّذ أي صفقة.</footer>
+</div>
+
+<script>
+const INTERVAL_SEC = { "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "1d": 86400 };
+const TZ = -new Date().getTimezoneOffset() * 60;     // chart shows local time
+const REASONS = { STOP: "وقف الخسارة", TRAIL: "الوقف المتحرك", TARGET: "الهدف", END_OF_TEST: "نهاية" };
+
+let accounts = [];
+const prices = {}, lastPrices = {}, klines = {}, cards = {};
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function fmtPrice(p) {
+  if (p == null || isNaN(p)) return "—";
+  const d = p >= 1000 ? 2 : p >= 1 ? 3 : 5;
+  return p.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+const fmtUsd = (v, sign = false) => v == null || isNaN(v) ? "—" :
+  (sign && v > 0 ? "+" : v < 0 ? "−" : "") + "$" + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPct = v => v == null || isNaN(v) ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2) + "%";
+const cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
+function fmtDur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+function fmtLocal(sec) {
+  return new Date(sec * 1000).toLocaleString("en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+const toSec = iso => Math.floor(Date.parse(iso) / 1000);
+const isMA = acc => acc.state.settings.strategy === "MA";
+const accLabel = acc => isMA(acc) ? `متوسط ${acc.state.settings.ma_days} يوم · يومي` : "الاستراتيجية D · 4 ساعات";
+
+// ---------------------------------------------------------------- position
+function position(acc) {
+  const st = acc.state, eng = st.engine, s = st.settings;
+  const step = INTERVAL_SEC[s.interval];
+  if (eng.pos) {
+    const p = eng.pos;
+    return { kind: "open", dir: p.dir, entry: p.entry_price, stop: p.stop, initialStop: p.initial_stop,
+             qty: p.qty, cost: p.cost, fee: 0, entryTime: toSec(p.entry_time) };
+  }
+  if (eng.pending) {
+    // The bot fills at the open of the candle after the signal; it records it
+    // when that candle closes. Until then we can already estimate it.
+    const entryTime = toSec(st.last_open_time) + step;
+    const k = (klines[acc.id] || []).find(k => k.time === entryTime);
+    if (!k) return { kind: "pending" };
+    const [d, atr] = eng.pending;
+    const entry = k.open * (1 + d * s.slippage_rate);
+    const byCash = eng.cash * s.max_position_fraction / (entry * (1 + s.fee_rate));
+    let qty = byCash, stop = null;
+    if (s.exit_mode !== "signal") {  // no stop in signal mode: the whole balance goes in
+      const dist = s.stop_atr * atr;
+      qty = Math.min(eng.cash * s.risk_per_trade / dist, byCash);
+      stop = entry - d * dist;
+    }
+    return { kind: "estimated", dir: d, entry, stop, initialStop: stop,
+             qty, cost: qty * entry, fee: qty * entry * s.fee_rate, entryTime };
+  }
+  return { kind: "flat" };
+}
+
+function liveEquity(acc, pos, price) {
+  const cash = acc.state.engine.cash;
+  if ((pos.kind === "open" || pos.kind === "estimated") && price)
+    return cash - pos.fee + pos.dir * pos.qty * (price - pos.entry);
+  return cash;
+}
+
+// ---------------------------------------------------------------- cards
+function buildCard(acc) {
+  const el = document.createElement("article");
+  el.className = "card";
+  el.innerHTML = `
+    <div class="card-head">
+      <div class="sym">${acc.symbol.replace("USDT", "")}<small>/USDT</small>
+        <span class="pill ${isMA(acc) ? "warn" : "info"}" style="font-size:12px;margin-inline-start:8px">${accLabel(acc)}</span></div>
+      <div class="price num" data-f="price">—</div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="label">الرصيد (لحظي)</div><div class="value num" data-f="equity">—</div></div>
+      <div class="kpi"><div class="label">العائد</div><div class="value num" data-f="ret">—</div></div>
+      <div class="kpi"><div class="label">شراء واحتفاظ</div><div class="value num" data-f="hold">—</div></div>
+      <div class="kpi"><div class="label">صفقات مغلقة</div><div class="value" data-f="trades">—</div></div>
+    </div>
+    <div class="position" data-f="position"></div>
+    <div class="chart" data-f="chart"></div>
+    <details><summary>سجل البوت</summary><pre class="log" data-f="log"></pre></details>`;
+
+  const chart = LightweightCharts.createChart($("[data-f=chart]", el), {
+    autoSize: true,
+    layout: { background: { color: "transparent" }, textColor: css("--muted"), fontFamily: "IBM Plex Mono, Consolas, monospace" },
+    grid: { vertLines: { color: css("--grid") }, horzLines: { color: css("--grid") } },
+    rightPriceScale: { borderColor: css("--border") },
+    timeScale: { borderColor: css("--border"), timeVisible: true, rightOffset: 4, barSpacing: 7 },
+    crosshair: { mode: 0 },
+  });
+  const candles = chart.addCandlestickSeries({
+    upColor: css("--up"), downColor: css("--down"), borderVisible: false,
+    wickUpColor: css("--up"), wickDownColor: css("--down"),
+  });
+  const ema20 = chart.addLineSeries({ color: css("--accent"), lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  const ema50 = chart.addLineSeries({ color: css("--warn"), lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  cards[acc.id] = { el, chart, candles, ema20, ema50, lines: [] };
+  return el;
+}
+
+function ema(values, span) {
+  const k = 2 / (span + 1); let prev;
+  return values.map(v => (prev = prev === undefined ? v : v * k + prev * (1 - k)));
+}
+
+function drawChart(acc, pos) {
+  const c = cards[acc.id], ks = klines[acc.id];
+  if (!c || !ks || !ks.length) return;
+  const data = ks.map(k => ({ ...k, time: k.time + TZ }));
+  const live = prices[acc.symbol];
+  if (live) {  // let the forming candle follow the live price
+    const last = data[data.length - 1];
+    last.close = live; last.high = Math.max(last.high, live); last.low = Math.min(last.low, live);
+  }
+  c.candles.setData(data);
+  const closes = data.map(d => d.close);
+  if (isMA(acc)) {  // the strategy's own line: the simple N-day average
+    const n = acc.state.settings.ma_days;
+    const sma = data.map((d, i) => i + 1 < n ? null
+      : { time: d.time, value: closes.slice(i + 1 - n, i + 1).reduce((a, b) => a + b, 0) / n });
+    c.ema20.applyOptions({ color: css("--warn"), lineWidth: 2 });
+    c.ema20.setData(sma.filter(Boolean));
+    c.ema50.setData([]);
+  } else {
+    const e20 = ema(closes, 20), e50 = ema(closes, 50);
+    c.ema20.setData(data.map((d, i) => ({ time: d.time, value: e20[i] })));
+    c.ema50.setData(data.map((d, i) => ({ time: d.time, value: e50[i] })));
+  }
+
+  const first = data[0].time;
+  const markers = [];
+  for (const t of acc.trades) {
+    const en = toSec(t.entry_time) + TZ, ex = toSec(t.exit_time) + TZ;
+    if (en >= first) markers.push({ time: en, position: "belowBar", color: css("--accent"), shape: "arrowUp", text: "دخول" });
+    if (ex >= first) markers.push({ time: ex, position: "aboveBar", color: t.pnl > 0 ? css("--up") : css("--down"),
+                                    shape: "circle", text: fmtUsd(t.pnl, true) });
+  }
+  if (pos.entryTime) markers.push({ time: pos.entryTime + TZ, position: "belowBar", color: css("--accent"), shape: "arrowUp",
+                                    text: pos.kind === "estimated" ? "دخول (تقديري)" : "دخول" });
+  markers.sort((a, b) => a.time - b.time);
+  c.candles.setMarkers(markers);
+
+  c.lines.forEach(l => c.candles.removePriceLine(l));
+  c.lines = [];
+  if (pos.entry) {
+    c.lines.push(c.candles.createPriceLine({ price: pos.entry, color: css("--accent"), lineWidth: 1, lineStyle: 2, title: "الدخول" }));
+    if (pos.stop != null)
+      c.lines.push(c.candles.createPriceLine({ price: pos.stop, color: css("--down"), lineWidth: 1, lineStyle: 2, title: "الوقف" }));
+  }
+}
+
+function renderPosition(acc, pos, price) {
+  const box = $("[data-f=position]", cards[acc.id].el);
+  const eng = acc.state.engine;
+  if (pos.kind === "flat") {
+    const waiting = isMA(acc)
+      ? `البوت ينتظر إغلاقاً يومياً فوق متوسط ${acc.state.settings.ma_days} يوم (الخط البرتقالي)، ثم يشتري بكامل الرصيد.`
+      : "البوت ينتظر إشارة: اتجاه صاعد + RSI بين 45 و65 + إغلاق فوق EMA 20 (الخط الأزرق) + السعر فوق متوسط 200 يوم.";
+    box.innerHTML = `<div class="title"><span class="pill info"><span class="dot"></span>لا توجد صفقة</span></div>
+      <div class="note">${waiting}</div>`;
+    return;
+  }
+  if (pos.kind === "pending") {
+    box.innerHTML = `<div class="title"><span class="pill warn live"><span class="dot"></span>إشارة ${eng.pending[0] === 1 ? "شراء" : "بيع"} — الدخول عند افتتاح الشمعة التالية</span></div>`;
+    return;
+  }
+  const upnl = price ? pos.dir * pos.qty * (price - pos.entry) - pos.fee : null;
+  const upct = price ? pos.dir * (price / pos.entry - 1) * 100 : null;
+  const hasStop = pos.stop != null;
+  const toStop = price && hasStop ? pos.dir * (price - pos.stop) / price * 100 : null;
+  // How far price sits between the stop (0%) and entry + 2x initial risk (100%).
+  const risk = hasStop ? Math.abs(pos.entry - pos.initialStop) : 1;
+  const fill = price && hasStop ? Math.max(0, Math.min(100, (pos.dir * (price - pos.stop)) / (risk * 3) * 100)) : 0;
+  const trailing = hasStop && pos.stop !== pos.initialStop;
+  const exitCell = hasStop
+    ? `<div><div class="label">${trailing ? "الوقف المتحرك" : "وقف الخسارة"}</div><div class="value num down">${fmtPrice(pos.stop)}</div></div>`
+    : `<div><div class="label">الخروج</div><div class="value">إغلاق يومي تحت المتوسط</div></div>`;
+  box.innerHTML = `
+    <div class="title">
+      <span class="pill ${pos.kind === "open" ? "ok" : "warn"} live"><span class="dot"></span>
+        ${pos.dir === 1 ? "صفقة شراء" : "صفقة بيع"} ${pos.kind === "open" ? "مفتوحة" : "مفتوحة (تقديري)"}</span>
+      <span class="sub">منذ ${fmtLocal(pos.entryTime)}</span>
+    </div>
+    <div class="pos-grid">
+      <div><div class="label">سعر الدخول</div><div class="value num">${fmtPrice(pos.entry)}</div></div>
+      ${exitCell}
+      <div><div class="label">الحجم</div><div class="value num">${fmtUsd(pos.cost)}</div></div>
+      <div><div class="label">ربح/خسارة غير محققة</div><div class="value num ${cls(upnl)}">${fmtUsd(upnl, true)} <span style="font-weight:500">(${fmtPct(upct)})</span></div></div>
+      ${hasStop ? `<div><div class="label">المسافة إلى الوقف</div><div class="value num">${fmtPct(toStop)}</div></div>` : ""}
+    </div>
+    ${hasStop ? `<div class="stopbar" title="بعد السعر عن الوقف"><div style="width:${fill}%"></div></div>` : ""}
+    ${eng.pending_exit ? `<div class="note" style="color:var(--warn)">📣 إشارة خروج: البيع عند افتتاح الشمعة التالية.</div>` : ""}
+    ${pos.kind === "estimated" ? `<div class="note">تقديري: البوت يسجّل الدخول رسمياً عند إغلاق هذه الشمعة. الحساب بنفس قواعد البوت (سعر الافتتاح + الانزلاق).</div>` : ""}`;
+}
+
+function renderAccount(acc) {
+  const c = cards[acc.id];
+  const price = prices[acc.symbol];
+  const pos = position(acc);
+  const s = acc.state.settings;
+  const eq = liveEquity(acc, pos, price);
+  const ret = (eq / s.initial_capital - 1) * 100;
+  const hold = price ? (price / acc.state.start_price - 1) * 100 : null;
+  const wins = acc.trades.filter(t => t.pnl > 0).length;
+
+  const priceEl = $("[data-f=price]", c.el);
+  priceEl.textContent = fmtPrice(price);
+  const prev = lastPrices[acc.symbol];
+  if (prev && price && price !== prev) {
+    priceEl.classList.remove("flash-up", "flash-down");
+    priceEl.classList.add(price > prev ? "flash-up" : "flash-down");
+    setTimeout(() => priceEl.classList.remove("flash-up", "flash-down"), 900);
+  }
+  $("[data-f=equity]", c.el).textContent = fmtUsd(eq);
+  const retEl = $("[data-f=ret]", c.el); retEl.textContent = fmtPct(ret); retEl.className = "value num " + cls(ret);
+  const holdEl = $("[data-f=hold]", c.el); holdEl.textContent = fmtPct(hold); holdEl.className = "value num " + cls(hold);
+  $("[data-f=trades]", c.el).innerHTML = acc.trades.length
+    ? `${acc.trades.length} <span class="sub">(${wins} ربح / ${acc.trades.length - wins} خسارة)</span>` : "0";
+  renderPosition(acc, pos, price);
+  $("[data-f=log]", c.el).textContent = acc.log.slice().reverse().join("\n") || "—";
+  return { eq, pos, initial: s.initial_capital };
+}
+
+function renderAll() {
+  const root = $("#accounts");
+  if (!accounts.length) { root.innerHTML = `<div class="empty">لا توجد حسابات بعد. شغّل: python paper.py --once</div>`; return; }
+  if ($(".empty", root)) root.innerHTML = "";
+  let totalEq = 0, totalInit = 0, open = 0;
+  for (const acc of accounts) {
+    if (!cards[acc.id]) root.appendChild(buildCard(acc));
+    const r = renderAccount(acc);
+    totalEq += r.eq; totalInit += r.initial;
+    if (r.pos.kind !== "flat") open++;
+  }
+  $("#t-equity").textContent = fmtUsd(totalEq);
+  const pnl = totalEq - totalInit;
+  const pnlEl = $("#t-pnl");
+  pnlEl.innerHTML = `${fmtUsd(pnl, true)} <span style="font-size:14px;font-weight:500">(${fmtPct(pnl / totalInit * 100)})</span>`;
+  pnlEl.className = "value num " + cls(pnl);
+  $("#t-open").textContent = `${open} من ${accounts.length}`;
+  renderHealth();
+}
+
+function renderHealth() {
+  if (!accounts.length) return;
+  const now = Date.now() / 1000;
+  let worst = "ok";
+  for (const a of accounts) {
+    const step = INTERVAL_SEC[a.state.settings.interval];
+    const lastClosedOpen = Math.floor(now / step) * step - step;
+    const minsSinceClose = (now - (lastClosedOpen + step)) / 60;
+    const lag = (lastClosedOpen - toSec(a.state.last_open_time)) / step;
+    if (lag <= 0) continue;
+    if (lag === 1 && minsSinceClose < 75) { if (worst === "ok") worst = "wait"; }
+    else worst = "late";
+  }
+  const h = $("#health");
+  if (worst === "ok") { h.className = "pill ok"; h.innerHTML = `<span class="dot"></span>البوت محدّث`; }
+  else if (worst === "wait") { h.className = "pill info"; h.innerHTML = `<span class="dot"></span>البوت يعالج آخر شمعة (قد يتأخر حتى 30 دقيقة)`; }
+  else { h.className = "pill bad"; h.innerHTML = `<span class="dot"></span>البوت متأخر — افتح صفحة Actions في GitHub`; }
+}
+
+function tick() {
+  const now = new Date();
+  $("#t-clock").textContent = now.toLocaleTimeString("en-GB");
+  const step = accounts.length ? INTERVAL_SEC[accounts[0].state.settings.interval] : INTERVAL_SEC["4h"];
+  const sec = now.getTime() / 1000;
+  $("#t-countdown").textContent = fmtDur(Math.ceil(sec / step) * step - sec);
+  if (generatedAt) $("#t-updated").textContent = "آخر تحديث من البوت: " + fmtLocal(toSec(generatedAt));
+}
+
+// ---------------------------------------------------------------- polling
+// accounts.json comes from the bot (the cloud publishes it after every run;
+// dashboard.py serves it locally). Prices and candles come straight from
+// Binance's public market-data API, so this page needs no server of its own.
+const BINANCE = "https://data-api.binance.vision/api/v3";
+let generatedAt = null;
+
+function setConn(ok) {
+  const el = $("#conn");
+  el.className = "pill live " + (ok ? "ok" : "bad");
+  el.innerHTML = `<span class="dot"></span>${ok ? "مباشر" : "لا يوجد اتصال — إعادة المحاولة…"}`;
+}
+
+async function getJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function loadAccounts() {
+  try {
+    const data = await getJson("accounts.json");
+    accounts = data.accounts; generatedAt = data.generated_at;
+    renderAll(); accounts.forEach(a => drawChart(a, position(a)));
+  } catch (e) { setConn(false); }
+}
+async function loadPrices() {
+  if (!accounts.length) return;
+  try {
+    const symbols = JSON.stringify([...new Set(accounts.map(a => a.symbol))]);
+    const rows = await getJson(`${BINANCE}/ticker/price?symbols=${encodeURIComponent(symbols)}`);
+    const p = Object.fromEntries(rows.map(r => [r.symbol, parseFloat(r.price)]));
+    for (const sym of Object.keys(p)) { lastPrices[sym] = prices[sym]; prices[sym] = p[sym]; }
+    setConn(true); renderAll();
+    for (const a of accounts) {  // move the forming candle only
+      const c = cards[a.id], ks = klines[a.id];
+      if (c && ks && ks.length && prices[a.symbol]) {
+        const last = { ...ks[ks.length - 1], time: ks[ks.length - 1].time + TZ };
+        const live = prices[a.symbol];
+        last.close = live; last.high = Math.max(last.high, live); last.low = Math.min(last.low, live);
+        c.candles.update(last);
+      }
+    }
+  } catch (e) { setConn(false); }
+}
+async function loadKlines() {
+  for (const a of accounts) {
+    try {
+      const rows = await getJson(`${BINANCE}/klines?symbol=${a.symbol}&interval=${a.state.settings.interval}&limit=300`);
+      klines[a.id] = rows.map(r => ({ time: r[0] / 1000, open: +r[1], high: +r[2], low: +r[3], close: +r[4] }));
+      drawChart(a, position(a));
+    } catch (e) { setConn(false); }
+  }
+  renderAll();
+}
+
+// The clock never waits for the network.
+setInterval(tick, 1000); tick();
+(async () => {
+  await loadAccounts();
+  loadPrices(); loadKlines();
+  setInterval(loadPrices, 3000);
+  setInterval(loadKlines, 30000);
+  setInterval(loadAccounts, 60000);
+})();
+</script>
+</body>
+</html>
